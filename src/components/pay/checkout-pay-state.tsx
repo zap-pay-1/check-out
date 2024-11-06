@@ -1,10 +1,8 @@
-
 //@ts-nocheck
 
 import { useMutation , useQuery} from '@tanstack/react-query'
 import { useQRCode } from 'next-qrcode'
 import { useParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
 import {
     Form,
     FormControl,
@@ -30,6 +28,7 @@ import {
   import { Input } from "@/components/ui/input"
   import { useForm } from "react-hook-form"
   import { zodResolver } from "@hookform/resolvers/zod"
+  import { useAccount, useModal, useWallets} from "@particle-network/connectkit"
 import { z } from "zod"
 import axios from 'axios'
 import { Button } from "@/components/ui/button"
@@ -37,16 +36,15 @@ import { AlertCircle, CheckCheckIcon, CircleCheckBig, Loader, Loader2, LoaderPin
 import { useToast } from '@/components/ui/use-toast'
 import { BACKEND_URL, WEBSITE_BASE_URL } from '@/constants'
 import React from 'react'
-import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } from 'viem'
-import CountdownTimer from '../CountDown'
-import { useModal, useWallets, useAccount} from '@particle-network/connectkit'
-import {initKlaster, Address, klasterNodeHost, rawTx, loadBicoV2Account, singleTxm,singleTx, buildMultichainReadonlyClient, MultichainTokenMapping, MultichainClient, buildTokenMapping, deployment, encodeBridgingOps, buildItx } from "klaster-sdk"
+import CountdownTimer from '@/components/CountDown'
+import { encodeFunctionData, erc20Abi, parseEther, parseUnits } from 'viem'
+import { buildItx, encodeBridgingOps, rawTx, singleTx } from 'klaster-sdk'
+import { useKlaster } from '@/providers/klaster-provider'
 import { arbitrum, base, optimism, polygon, scroll, baseSepolia, sepolia } from 'viem/chains'
 import { acrossBridgePlugin } from '@/lib/across-bridge-plugin'
-import { useKlaster } from '@/providers/klaster-provider'
 import { hasEnoughBalance } from '@/lib/balance-checker'
 
-
+//
 const formSchema = z.object({
     payerEmail: z.string(),
     payerName : z.string(),
@@ -67,86 +65,18 @@ type Props  = {
     setisCheckingOut :  any
 
 }
-export default function PayState2({data, SESSION_EXP_TIME, status} : Props) {
-  const {klasterBalances, klasterAddress}  = useKlaster()
-   const {setOpen, isOpen} = useModal()
+export default function CheckouSessionPayState({data, SESSION_EXP_TIME, status} : Props) {
    const {isConnected, address} = useAccount()
+   const {setOpen}  = useModal()
     const params =  useParams()
     const sessionId = params.sessionId
   const  PAY_BASE_URL = `${BACKEND_URL}/pay/`
-   const [primaryWallet] = useWallets();
-    const [isBrdging, setisBrdging] = useState(false)
-    const [bridgingError, setbridgingError] = useState(false)
-    const [bridingingErrorMessage, setbridingingErrorMessage] = useState(null)
-   const [klaster, setKlaster] = useState(null);
-   const {toast} = useToast()
-// KLASTER  INSTANCES
-
+   const {toast}  = useToast()
+     const {mUSDC, mcClient, klaster, klasterBalances, mcUSDC} = useKlaster()
+     const [primaryWallet] = useWallets();
 // WALLET CLIENT
-   const walletClient = primaryWallet?.getWalletClient();
-
-   useEffect(() => {
-    const initializeKlaster = async () => {
-      console.log("I'm hitted")
-      try {
-
-        const klasterInstance = await initKlaster({
-          accountInitData: loadBicoV2Account({
-            owner: address,
-          }),
-          nodeUrl: klasterNodeHost.default,
-        });
-        const klasterWalletAddress =  klasterInstance.account.getAddress(base.id)
-    console.log("klaster instance address", klasterWalletAddress)
-
-        setKlaster(klasterInstance);
-      } catch (error) {
-        console.error("Error initializing Klaster:", error);
-      }
-    };
-
-    initializeKlaster();
-  }, [address]);
-
-
-  // MULTICHAIN CLIENTS
-
-  const mcClient = buildMultichainReadonlyClient(
-    [optimism, base, polygon, arbitrum, scroll, baseSepolia].map((x) => {
-      return {
-        chainId: x.id,
-        rpcUrl: x.rpcUrls.default.http[0],
-      };
-    })
-  );
-
-// INTERSECTING TOKENS WITH CLIENTS
-
-const intersectTokenAndClients = (
-  token: MultichainTokenMapping,
-  mcClient: MultichainClient
-) => {
-  return token.filter((deployment) =>
-    mcClient.chainsRpcInfo
-      .map((info) => info.chainId)
-      .includes(deployment.chainId)
-  );
-};
- 
-// TOKEN MAPPING
-
-const mcUSDC = buildTokenMapping([
-  deployment(optimism.id, "0x0b2c639c533813f4aa9d7837caf62653d097ff85"),
-  deployment(base.id, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
-  deployment(polygon.id, "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"),
-  deployment(arbitrum.id, "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"),
-  deployment(baseSepolia.id, "0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
-])
-// ASSIGNING TOKENS TO INSTERSECTION
-const mUSDC = intersectTokenAndClients(mcUSDC, mcClient);
-
-
-
+const walletClient = primaryWallet?.getWalletClient();
+     console.log("expiration time", SESSION_EXP_TIME)
     // 1. Define your form.
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -172,82 +102,69 @@ const mUSDC = intersectTokenAndClients(mcUSDC, mcClient);
     queryFn : handleFetchCountries
    })
 
-   const RECIEVER_2 = data?.reciever?.userId?.wallet
-   const  AMOUNT_2 = data?.session?.amount?.toString() || data?.reciever?.amount?.toString()
+   const RECIEVER_2 = data?.session?.merchantWallet
+   const  AMOUNT_2 = "1" //data?.session?.totalPrice?.toString()
 
-
-   const  handleInitiatePayment =  async ()  =>  {
-     try {
-         const  res  =  await axios.post(`${PAY_BASE_URL}initiate-payment/${sessionId}`)
-           console.log(res.data)
-     } catch (error) {
-       console.log("something went wrong initiating payment", error)
-     }
-   }
-
-
-   // KLASTER TRANSFER 
-   const klasterTransfer =  async ()  =>  {
-   try {
-    setisBrdging(true)
-  const bridgingOps =  await encodeBridgingOps({
-    tokenMapping : mcUSDC,
-    account : klaster?.account,
-    amount : parseUnits(AMOUNT_2, 6),
-    destinationChainId : arbitrum.id,
-    bridgePlugin :    (data)  => acrossBridgePlugin(data),
-    client : mcClient
-  })
-
-   console.log("bridge information", bridgingOps)
-
-  const opUSDC = mcUSDC.find(token =>  token.chainId === polygon.id)
-
-   const sendUsdc  =  rawTx({
-     to: opUSDC?.address,
-     gasLimit: BigInt(120000),
-     data : encodeFunctionData({
-      abi : erc20Abi,
-      functionName : "transfer",
-       args : [
-        RECIEVER_2,
-        bridgingOps.totalReceivedOnDestination
-]
-     })
-   }) 
  
-const  itx =   buildItx({
-  steps : bridgingOps.steps.concat([
-    singleTx(arbitrum.id, sendUsdc),
-  ]),
-  feeTx : klaster?.encodePaymentFee(polygon.id, "USDC")
-})
 
-const quote =   await  klaster.getQuote(itx)
- console.log("the quote of token", quote)
+      // KLASTER TRANSFER 
+      const klasterTransfer =  async ()  =>  {
+        console.log("you hitted me")
+      const bridgingOps =  await encodeBridgingOps({
+        tokenMapping : mcUSDC,
+        account : klaster?.account,
+        amount : parseUnits(AMOUNT_2, 6),
+        destinationChainId : arbitrum.id,
+        bridgePlugin :    (data)  => acrossBridgePlugin(data),
+        client : mcClient
+      })
+    
+       console.log("bridge information", bridgingOps)
+    
+      const opUSDC = mcUSDC.find(token =>  token.chainId === polygon.id)
+    
+       const sendUsdc  =  rawTx({
+         to: opUSDC?.address,
+         gasLimit: BigInt(120000),
+         data : encodeFunctionData({
+          abi : erc20Abi,
+          functionName : "transfer",
+           args : [
+            RECIEVER_2,
+            bridgingOps.totalReceivedOnDestination
+    ]
+         })
+       }) 
+     
+    const  itx =   buildItx({
+      steps : bridgingOps.steps.concat([
+        singleTx(arbitrum.id, sendUsdc),
+      ]),
+      feeTx : klaster?.encodePaymentFee(polygon.id, "USDC")
+    })
+    
+    const quote =   await  klaster.getQuote(itx)
+     console.log("the quote of token", quote)
+    
+     // Sign a message
+    const  signed = await walletClient?.signMessage({
+    message : {
+    raw : quote.itxHash
+    },
+    account : address
+    })
+    
+    
+    const result = await klaster?.execute(quote, signed)
+    
+    console.log("signed message", signed)
+    
+    console.log("excuted results", result)
+    
+    return result?.itxHash
+    }
 
- // Sign a message
-const  signed = await walletClient?.signMessage({
-message : {
-raw : quote.itxHash
-},
-account : address
-})
 
-
-const result = await klaster?.execute(quote, signed)
-
-console.log("signed message", signed)
-
-console.log("excuted results", result)
-setisBrdging(false)
-return result?.itxHash} catch (error) {
-  setisBrdging(false) 
-  setbridgingError(true) 
-  setbridgingError(error)
-  console.log("bridging error message ", error)
-}
-}
 
      // 2. Define a submit handler.
   function onSubmit(values: z.infer<typeof formSchema>) {
@@ -257,6 +174,7 @@ return result?.itxHash} catch (error) {
   }
 
       const values =  form.watch() 
+
 
          const handlePay1 = async () => {
           console.log("the receiver", RECIEVER_2);
@@ -276,12 +194,8 @@ return result?.itxHash} catch (error) {
               return; // Exit the function, don't continue to the DB part
             }
         
-            console.log("transaction hash", txHash);
-        
-            // Proceed with initiating the payment in the database
-            await handleInitiatePayment();
-            
-            const values = form.watch(); // Get form values
+            console.log("transaction hash", txHash)
+              const values = form.watch(); // Get form values
             const valueData = {
               payerEmail: values.payerEmail,
               payerName: values.payerName,
@@ -297,7 +211,7 @@ return result?.itxHash} catch (error) {
               transactionHash: txHash
             };
         
-            const res = await axios.post(`${PAY_BASE_URL}check-out/${sessionId}`, valueData);
+            const  res  = await  axios.post(`${PAY_BASE_URL}checkout-session/${sessionId}`,  valueData)
             return res;
           } catch (error) {
             // Handle any errors that occur during the process
@@ -318,31 +232,29 @@ return result?.itxHash} catch (error) {
 
      // Disabled logic
   const isButtonDisabled = 
-  (data?.reciever?.collectEmail && !values.payerEmail) ||
-  (data?.reciever?.collectName && !values.payerName) ||
-  (data?.reciever?.collectAddress && 
+  (data?.session?.collectEmail && !values.payerEmail) ||
+  (data?.session?.collectName && !values.payerName) ||
+  (data?.session?.collectAddress && 
     (!values.addressLine1 || !values.addressLine2));
 
      console.log("mutation status", mutation.status)
 
-     console.log("values", values)
+     console.log("shit values", data)
    const { Canvas } = useQRCode();
     const getChckeouView = ()  =>  {
-        if( data?.reciever?.collectEmail ||  
-            data?.reciever?.collectName  ||
-            data?.reciever?.collectAddress ){
+        if( data?.session.collectShippingAddress ){
                 return(
                     <>
+                  
                     <h1 className='  font-semibold text-sm my-2  '>Contact  information</h1>
                     
-
                     <div> 
                            
                            <Form {...form}>
                         <form   onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                     
                     <div className='flex flex-col space-y-2'>
-                        {  data?.reciever?.collectName  &&
+                        {  data?.session?.collectName  &&
                                <FormField
                                  control={form.control}
                                  name="payerName"
@@ -368,7 +280,7 @@ return result?.itxHash} catch (error) {
                        
                                  }
                        
-                       {  data?.reciever?.collectEmail &&
+                       {  data?.session?.collectEmail &&
                                <FormField
                                  control={form.control}
                                  name="payerEmail"
@@ -391,7 +303,7 @@ return result?.itxHash} catch (error) {
                                  }
                                  </div>
                        
-                       {  data?.reciever?.collectAddress  &&
+                       {  data?.session?.collectAddress  &&
                               
                         <div>
                                        <h1 className='mb-2'>Shipping address</h1>
@@ -522,10 +434,10 @@ return result?.itxHash} catch (error) {
                                          <p className=''>Wallet</p>
                                       </div>
                                        {! isConnected  ?  (
-                                      <Button className='w-full' type='button' onClick={()  => setOpen(true)}>Connect wallet</Button>
+                                      <Button className='w-full' type='button' onClick={() => setOpen(true)}>Connect wallet</Button>
                                        ) : (
                                         <Button disabled={
-                                 isButtonDisabled || mutation.isPending 
+                                 isButtonDisabled || mutation.isPending ||  !hasEnoughBalance(klasterBalances, AMOUNT_2)
                                         }  
                                         onClick={() => mutation.mutateAsync()}  
                                         className={`w-full capitalize `} >{data?.reciever?.labelText ? `${data?.reciever?.labelText} Now` : mutation.isPending ? "Loading..." : "Pay now"}</Button>  
@@ -535,19 +447,13 @@ return result?.itxHash} catch (error) {
                                        )}
                                        </div>
 
-
-                                    <div>
-                                        {klasterAddress  && data  && ! hasEnoughBalance(klasterBalances, AMOUNT_2) && (
-                                          <p className='text-center text-red-500'>Not Enough Balance! Deposit some USDC to your klaster Wallet</p>
-                                        )
-                                          
-                                        }
-                                      </div>   
+   
+                                              
                        
                      <AccordionItem value="item-2"  className='my-3 border px-2 rounded-xl'>
                        <AccordionTrigger>
                           <div  className='flex items-center space-x-2'><QrCode className='w-5 h-5'  />
-                          <p>Scan QR code</p>
+                          <p>Scan QR  code</p>
                            </div>
                        </AccordionTrigger>
                        <AccordionContent className='flex  items-center justify-center  '>
@@ -566,7 +472,7 @@ return result?.itxHash} catch (error) {
                                                },
                                            }}
                                            logo={{
-                                             src: 'https://pbs.twimg.com/profile_images/1804136325756469248/GD6ODnI6_400x400.jpg',
+                                             src: 'https://pbs.twimg.com/profile_images/1792601935737966592/EK42ujXH_400x400.jpg',
                                              options: {
                                                width: 35,
                                                x: undefined,
@@ -577,13 +483,20 @@ return result?.itxHash} catch (error) {
                                          />
                                      </div>
                     
-                                     <div  className='border  p-1 mt-3 rounded-xl'>
+                                     <div  className='border  p-3 mt-3 rounded-xl'>
+                                           <div  className='my-4 '>
+                                              <h1  className='font-medium text-sm   mb-1'>{`Send ${data?.session?.totalPrice} dev token on ${data?.session.network} network`}</h1>
+                                               <div className='flex items-center  space-x-1'>
+                                                  <MessageCircleWarningIcon  className='w-3 h-3 text-muted-foreground'  />
+                                                   <p  className='text-xs  text-muted-foreground'>Sending funds on the wrong network or token leads to fund loss.</p>
+                                               </div>
+                                           </div>
                                            <Button disabled ={! status}  className='w-full ' variant={"outline"}>
                                            
                                           { status &&  status.status  === "COMPLETED"  && status.invoiceId === sessionId ?  (
                                             <>
                                             <CheckCheckIcon className="mr-2 h-4 w-4" />
-                                             Payment made succfully
+                                             Payment made succecfully
                                              </>
                                              )  : status &&  status.status  === "FAILED"  && status.invoiceId === sessionId? (
                                               <>
@@ -604,7 +517,7 @@ return result?.itxHash} catch (error) {
                      </AccordionItem>
                     
                     </Accordion>     
-                  
+                   
                         </form>
                     
                     </Form>
@@ -612,9 +525,11 @@ return result?.itxHash} catch (error) {
                         </>
                 )
             }else {
+              return(
                 <Accordion type="single" collapsible className="w-full">
  
         <div className='border p-3 rounded-xl'>
+       
                          <div className='flex items-center space-x-2  mt-0 mb-6 '>
                             <Wallet className='w-5 h-5'  />
                             <p className=''>Wallet</p>
@@ -622,7 +537,7 @@ return result?.itxHash} catch (error) {
                           {! isConnected  ?  (
                          <Button className='w-full' onClick={ () => setOpen(true)}>Connect wallet</Button>
                           ) : (
-                           <Button type='button' onClick={()  => mutation.mutateAsync()} className={`w-full capitalize `} >{data?.reciever?.labelText ? `${data?.reciever?.labelText} Now` : "continue to pay"}</Button>  
+                           <Button type='button' onClick={()  => mutation.mutateAsync()} className={`w-full capitalize `} disabled={ isButtonDisabled || mutation.isPending ||  ! hasEnoughBalance(klasterBalances, AMOUNT_2)}>{data?.reciever?.labelText ? `${data?.reciever?.labelText} Now` : "continue to pay"}</Button>  
        
                           )}
                           </div>
@@ -637,7 +552,7 @@ return result?.itxHash} catch (error) {
              <div  className='my-4  flex  items-center justify-center  flex-col'>
              <div  className=' bg-slate-100 rounded-xl p-2'>
                              <Canvas
-                              text={`${WEBSITE_BASE_URL}payment/checkout-session/${sessionId}`}
+                              text={`${WEBSITE_BASE_URL}pay/checkout-session/${sessionId}`}
                               options={{
                                 errorCorrectionLevel: 'M',
                                 margin: 2,
@@ -649,7 +564,7 @@ return result?.itxHash} catch (error) {
                                   },
                               }}
                               logo={{
-                                src: 'https://pbs.twimg.com/profile_images/1792601935737966592/EK42ujXH_400x400.jpg',
+                                src: 'https://pbs.twimg.com/profile_images/1804136325756469248/GD6ODnI6_400x400.jpg',
                                 options: {
                                   width: 35,
                                   x: undefined,
@@ -660,20 +575,14 @@ return result?.itxHash} catch (error) {
                             />
                         </div>
        
-                        <div  className='border  p-3 mt-3 rounded-xl'>
-                              <div  className='my-4 '>
-                                 <h1  className='font-medium text-sm   mb-1'>{`Send ${data?.session?.amount} ${data?.session?.coin} tokens on ${data?.session?.coin} network`}</h1>
-                                  <div className='flex items-center  space-x-1'>
-                                     <MessageCircleWarningIcon  className='w-3 h-3 text-muted-foreground'  />
-                                      <p  className='text-xs  text-muted-foreground'>Sending funds on the wrong network or token leads to fund loss.</p>
-                                  </div>
-                              </div>
-                              <Button disabled ={ ! status}  className='w-full ' variant={"secondary"} type='button'>
+                        <div  className='border  p-1 mt-3 rounded-xl'>
+                              
+                              <Button disabled ={ ! status}  className='w-full ' variant={"outline"} type='button'>
                               
                              { status &&  status.status  === "COMPLETED"  && status.invoiceId === sessionId ?  (
                                <>
                                <CheckCheckIcon className="mr-2 h-4 w-4" />
-                                Payment made succfully
+                                Payment made succecfully
                                 </>
                                 )  : status &&  status.status  === "FAILED"  && status.invoiceId === sessionId? (
                                  <>
@@ -694,7 +603,7 @@ return result?.itxHash} catch (error) {
         </AccordionItem>
        
        </Accordion> 
-            }
+            )}
     }
   return (
     <div>
@@ -702,7 +611,12 @@ return result?.itxHash} catch (error) {
     <h1  className='font-semibold  text-sm lg:text-xl'>{data?.reciever?.collectEmail ||  data?.reciever?.collectAddress ||  data?.reciever?.collectName  ?  "Fill  in the  details"   :  "Pay with"}</h1>
        <CountdownTimer   expTime={SESSION_EXP_TIME}  />
     </div>
-
+  
+    {klasterBalances  && data  && ! hasEnoughBalance(klasterBalances, AMOUNT_2) && (
+                                          <p className='text-center text-red-500 text-xs my-2'>Not Enough Balance! Deposit some USDC to your klaster Wallet</p>
+                                        )
+                                          
+                                        } 
       {getChckeouView()}
     </div>
   )

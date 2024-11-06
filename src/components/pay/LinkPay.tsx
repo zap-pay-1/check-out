@@ -15,6 +15,8 @@ import { Progress } from "@/components/ui/progress"
 import {
   useQuery,
   useMutation,
+  useQueryClient,
+  QueryClient,
 } from '@tanstack/react-query'
 import {
   Form,
@@ -36,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Loader } from 'lucide-react'
-import { BACKEND_URL, currencies, supportedNetworks } from '@/constants'
+import { BACKEND_URL } from '@/constants'
 
 const formSchema = z.object({
   amount: z.coerce.number(),
@@ -44,56 +46,55 @@ const formSchema = z.object({
     coin : z.string()
  })
 
- type Props = {
-  data : any
- }
-
-export default function LinkPay({data} : Props) {
+export default function LinkPay() {
 
   const params =  useParams()
   const  router =  useRouter()
-  const [isLoading1, setisLoading] = useState(false)
   const [isRedirecting, setisRedirecting] = useState(false)
-  const linkId = params.linkId
+
      const  PAY_BASE_URL = `${BACKEND_URL}/pay/`
-  
- 
+     const  LOCAL_PAY_BASE_URL = `http://localhost:5000/pay/`
+
+
+  const handleFetchLink  =   async ()  =>  {
+    const res  =  await  axios.get(`${BACKEND_URL}link/${linkId}`)
+     return res.data
+  }
+
+    const {data, isPending, isError, isSuccess, isLoading, error}  = useQuery({
+     queryKey : ['linkData'],
+     queryFn : handleFetchLink
+    })
+
+    const linkId = params.linkId
 
    console.log("path name ",data)
 
-      const  generateCheckouSession =  async (CHECKOUT_DATA) => {
-        try {
-          const sessionId =   await axios.post(`${PAY_BASE_URL}create-session/${linkId}`, CHECKOUT_DATA)
-          return  sessionId
-          
-        } catch (error) {
-          console.log("somthing went wrong", error)
-        }
-       }
+      const  generateCheckouSession =  async (CHECKOUT_DATA)  =>   {
+         const sessionId =   await axios.post(`${PAY_BASE_URL}create-session/${linkId}`, CHECKOUT_DATA)
+           return  sessionId
+      }
 
     const pushToChckOut =   async (CHECKOUT_DATA)  =>  {
-      setisLoading(true)
         const  id =  await generateCheckouSession(CHECKOUT_DATA )
-        setisLoading(false)
-         if(id?.status  === 200){
+         if(id.status  === 200){
           setisRedirecting(true)
      router.push(`/payment/checkout-session/${id.data.sessionId}`)
          }
     }
 
+
   
 
    useEffect(() => {
 
-    if(data && data?.paymentLink?.paymentType === "fixed"){
+    if(data && data.paymentType === "fixed"){
        const  DEFAULT_TOKEN_DATA  =  {
-        amount : data.paymentLink.amount,
-        coin :  data?.paymentLink?.coin || "USDC",
-        network :  data?.paymentLink?.network || "Base"
+          amount :  data?.amount,
+           coin  :  "HBAR",
+           network :  "Hedera"
        }
       pushToChckOut(DEFAULT_TOKEN_DATA)
-
-     
        
     }
     
@@ -108,8 +109,8 @@ export default function LinkPay({data} : Props) {
      resolver: zodResolver(formSchema),
      defaultValues: {
       amount : 1,
-      coin :  "dev",
-      network :  "Moonbase alpha"
+      coin :  "HBAR",
+      network : "Hedera"
       
      },
    })
@@ -124,26 +125,63 @@ export default function LinkPay({data} : Props) {
        //const  res  = await  axios.post(`${PAY_BASE_URL}session/${linkId}`,  values)
    console.log(values)
           await pushToChckOut(values)
-         } catch (error) {
+        
+ 
+            
+       
+     } catch (error) {
         console.log("error", error)
         toast({
-         title : "Something went wrong",
-         description  : "make sure you have connected to internet and filled all fiealds with valid information if not solve please contact us",
-         variant : "destructive"
+         title : "something went wrong",
+         description  : "something went wrong check consol"
         })
-       }
-}
+       
+     }
+       
+ 
          
+     console.log("the value", values)
+    
+   }
+
+
+  
+
+
+          if(error){
+            return(
+              <div className='w-full h-screen flex items-center justify-center'>
+
+                <p className='font-semibold text-center'>Something went wrong please check your connection and reload</p>
+                <p className='text-muted-foreground text-center'>Or reach out to our customer suport</p>
+              </div>
+            )
+          }
+
+          if(isLoading){
+            return(
+              <div className='w-full h-screen flex items-center justify-center'>
+
+               <Loader
+
+  className='w-24 h-24 text-indigo-500 animate-spin'
+/>
+              </div>
+            )
+          }
+
+        
+          
   return (
-    <div className='w-full min-h-screen bg-zinc-100 dotted flex items-center justify-center'>
+    <div className='w-full min-h-screen bg-yellow-500 flex items-center justify-center'>
    
-    <div  className=' w-[95%] mx-auto md:w-[450px] border border-zinc-200 shadow-2xl shadow-zinc-400   bg-white rounded-xl md:rounded-3xl p-5'>
+    <div  className='w-[450px]   bg-background rounded-3xl p-5'>
    
     
     
      <div  className='p-6 my-2'>
-        <h1  className='font-semibold  text-xl text-center mt-3 mb-1 line-clamp-1 '>{data?.paymentLink?.linkName}</h1>
-         <h2 className='text-muted-foreground  text-base  text-center line-clamp-2 '>{data?.paymentLink?.description}</h2>
+        <h1  className='font-semibold  text-xl text-center mt-3 mb-1'>{data?.paymentLink?.linkName}</h1>
+         <h2 className='text-muted-foreground  text-lg  text-center'>{data?.paymentLink?.description}</h2>
      </div  >
 
       <div  className=' dark:bg-background  pt-5  p-3 rounded-t-3xl'>
@@ -158,17 +196,14 @@ export default function LinkPay({data} : Props) {
 
             <FormItem className='my-4'>
                 <FormLabel>Network</FormLabel>
-                 <Select onValueChange={field.onChange} defaultValue={"base"}  >
+                 <Select onValueChange={field.onChange} defaultValue={field.value}  >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Network" />
+                    <SelectValue placeholder="Hedera" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {supportedNetworks.map((item, i) =>  (
-                   <SelectItem key={i} value={item.value}>{item.name}</SelectItem>
-                  ))}
-                  
+                  <SelectItem value="Hedera">Hedera</SelectItem>
                 </SelectContent>
               </Select>
                  
@@ -184,16 +219,14 @@ export default function LinkPay({data} : Props) {
 
             <FormItem className='my-4'>
                 <FormLabel>Coin</FormLabel>
-                 <Select onValueChange={field.onChange} defaultValue={"USDC"}  >
+                 <Select onValueChange={field.onChange} defaultValue={field.value}  >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Coin" />
+                    <SelectValue placeholder="HBAR" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {currencies.map((item,i) => (
-                    <SelectItem key={i} value={item.value} disabled={item.key !== 0}>{item.name}</SelectItem>
-                  ))}
+                  <SelectItem value="HBAR">HBAR</SelectItem>
                 </SelectContent>
               </Select>
                  
@@ -217,7 +250,7 @@ export default function LinkPay({data} : Props) {
               </FormControl>
               <FormMessage />
             </FormItem>      )}/> 
-            <Button type="submit" className='w-full' disabled={isRedirecting || isLoading1} >{isRedirecting || isLoading1  ? "loading.." : "Continue to pay"}</Button>
+            <Button type="submit" className='w-full' disabled={isRedirecting} >{isRedirecting   ? "loading.." : "Continue to pay"}</Button>
 
 </form>
 </Form>

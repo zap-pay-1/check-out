@@ -18,7 +18,7 @@ export default function SessionSuccess({data, status} : Props) {
   console.log("status from tx result success componennt", status)
 const hash = status ? status?.txHash : data?.session?.txHash
   const  openTx  =  (txHash :  any)  =>  {
-      window.open(`https://moonbase.moonscan.io/tx/${txHash}`)
+      window.open(`https://explorer.klaster.io/details/${txHash}`)
   }
 
 

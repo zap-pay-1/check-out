@@ -19,8 +19,9 @@ export default function SuccessState({data, status} : Props) {
 
   console.log("status from tx result success componennt", status)
 
+  const hash = status ? status?.txHash : data?.invoice?.txHash
   const  openTx  =  (txHash :  any)  =>  {
-      window.open(`https://explorer.aptoslabs.com/txn/${txHash}?network=testnet`)
+      window.open(`https://explorer.klaster.io/details/${txHash}`)
   }
 
 
@@ -59,19 +60,19 @@ export default function SuccessState({data, status} : Props) {
  <div className=' mt-4  p-2 border-b'>
   <div className='flex justify-between w-full my-3 items-center'>
     <h3 className='font-light '>Amount</h3>
-     <h4 className='text-muted-foreground  font-mono'>{testStatus?.amount}</h4>
+     <h4 className='text-muted-foreground  font-mono'>{  status ? status?.amount  : data?.invoice?.totalAmount}</h4>
   </div>
   <div className='flex justify-between w-full my-3  items-center'>
     <h3 className='font-light '>From</h3>
-     <h4 className='text-muted-foreground text-sm font-mono'>{  testStatus && truncateText(testStatus?.sender, 16,8,7)}</h4>
+     <h4 className='text-muted-foreground text-sm font-mono'>{ status ? status?.sender : data && truncateText(data?.senderWallet, 16,8,7)}</h4>
   </div>
   <div className='flex justify-between w-full my-3 items-center'>
     <h3 className='font-light '>To</h3>
-     <h4 className='text-muted-foreground text-sm font-mono'>{data?.reciever?.userId.wallet  ? data?.reciever?.userId?.wallet  : "-" }</h4>
+     <h4 className='text-muted-foreground text-sm font-mono'>{data?.invoice?.userId.wallet  ? truncateText(data?.invoice?.userId.wallet, 16,8,7)   : "-" }</h4>
   </div>
   <div className='flex justify-between w-full my-3 items-center'>
     <h3 className='font-light '>Tx hash</h3>
-     <h4 className='text-muted-foreground font-mono text-sm '>{  testStatus && truncateText(testStatus?.txHash, 16,8,7)}</h4>
+     <h4 className='text-muted-foreground font-mono text-sm '>{  status ? truncateText(status?.txHash, 16,8,7) : data ?  truncateText(data?.invoice?.txHash, 16,8,7) : "--"}</h4>
   </div>
    
  </div>
@@ -81,7 +82,7 @@ export default function SuccessState({data, status} : Props) {
      <h1 className=' text-xs text-center mt-4 text-muted-foreground hidden'>Weve  emailed your receipt to <span className='text-blue-600'>kabuguabdul2@gmail.com</span></h1>
 
      <div  className='flex items-center justify-between space-x-4 mt-3'>
-       <Button  variant={"outline"} className='w-full'  onClick={()  => openTx(testStatus?.txHash)}>View transaction</Button>
+       <Button  variant={"outline"} className='w-full'  onClick={()  => openTx(hash)}> muku View transaction</Button>
        <Button className='w-full' >Download reciept</Button>
      </div>
    </div>

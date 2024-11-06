@@ -1,6 +1,7 @@
 
 
 
+//@ts-nocheck
 
 "use client"
 import '@rainbow-me/rainbowkit/styles.css';
@@ -23,7 +24,7 @@ import {
   const queryClient  =  new QueryClient
   const config = getDefaultConfig({
     appName: 'My RainbowKit App',
-    projectId: 'YOUR_PROJECT_ID',
+    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID as string,
     chains: [moonbaseAlpha, moonbeam, moonriver],
     ssr: false, // If your dApp uses server side rendering (SSR)
   });

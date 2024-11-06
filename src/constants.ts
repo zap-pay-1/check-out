@@ -5,7 +5,7 @@ import { Calendar, } from "lucide-react";
 import { BadgeDollarSign , Link, House, Settings, LayoutDashboard, Link2, Flame, Code2, TrendingUp, DollarSign} from "lucide-react";
 import { IconInvoice } from "@tabler/icons-react";
 export const  GLOBAL_LOGO ="https://pbs.twimg.com/profile_images/1792601935737966592/EK42ujXH_400x400.jpg"
-export const  BACKEND_URL =  "https://pap-4ohb.onrender.com"
+export const  BACKEND_URL =  "http://localhost:5000"   //"https://pap-4ohb.onrender.com"
  export const WEBSITE_BASE_URL = "https://devnet.munapay.xyz/"
  export const  INVOICE_ABB =  "#XWZHZ1JJK"
  export const PUBLIC_IPFS_GATEWAY ="https://ipfs.subsocial.network/ipfs/"
@@ -58,39 +58,43 @@ export const paymentScheduleDates = [
 
   export const currencies =  [
     {
-     name : "GLMR",
-     value :  "GLMR"
-    },
-    {
      name : "USDC",
-     value :  "USDC"
+     value :  "USDC",
+     key : 0
     },
     {
-      name : "USDT",
-      value :  "USDT"
+     name : "USDT",
+     value :  "USDT",
+     key : 1
+    },
+    {
+      name : "ETH",
+      value :  "ETH",
+      key : 2
      },
-     {
-      name : "POLKADOT",
-      value :  "DOT"
-     },
-     {
-      name : "BITCOIN",
-      value :  "BTC"
-     },
+     
  ]
 
  export const supportedNetworks = [
   {
-    name : "Moonbeam",
-     value : "moonbeam",
+    name : "Arbitrum",
+     value : "arbitrum",
+     key : 0
   },
   {
-    name : "Moonriver",
-     value : "moonriver",
+    name : "Base",
+     value : "base",
+     key : 1
   },
   {
-    name : "Acala",
-     value : "acala",
+    name : "Polygon",
+     value : "polygon",
+     key : 2
+  },
+  {
+    name : "TRON",
+     value : "tron",
+     key : 3
   },
  ]
 

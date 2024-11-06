@@ -1,4 +1,5 @@
 
+
 //@ts-nocheck
 
 "use client"
@@ -9,7 +10,7 @@ import {
   } from '@tanstack/react-query'
   import io from 'socket.io-client';
   import { useQRCode } from 'next-qrcode'
-
+//
   import {
     Accordion,
     AccordionContent,
@@ -31,9 +32,14 @@ import Image from 'next/image';
 import SuccessState from './success-state';
 import PaidState from './paid-status';
 import FailedState from './failedState';
-import { useAccount , useSendTransaction} from 'wagmi';
-import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
-import { parseEther } from 'viem';
+import { useAccount, useWallets, useModal} from '@particle-network/connectkit';
+import { encodeFunctionData, erc20Abi, parseEther, parseUnits } from 'viem';
+import { hasEnoughBalance } from '@/lib/balance-checker';
+import { useKlaster } from '@/providers/klaster-provider';
+import { buildItx, encodeBridgingOps, rawTx, singleTx } from 'klaster-sdk';
+import { arbitrum, base, optimism, polygon, scroll, baseSepolia, sepolia } from 'viem/chains'
+import { acrossBridgePlugin } from '@/lib/across-bridge-plugin';
+import CheckoutNavbar from '../checkout-navbar';
 
 const formSchema = z.object({
     payerEmail: z.string(),
@@ -46,19 +52,24 @@ const formSchema = z.object({
       state : z.string(),
       zipCode :  z.string()
    })
-export default function InvoiceCheckOut() {
+
+   type Props =  {
+    data : any
+   }
+export default function InvoiceCheckOut({data} : Props) {
     const [isCheckingOut, setisCheckingOut] = useState(false)
     const [status, setStatus] = useState()
   const {isConnected, address}  = useAccount()
-  const {openConnectModal} = useConnectModal()
-  const  handleTransferFund = useSendTransaction()
+  const {klaster, klasterAddress, klasterBalances, mcClient, mcUSDC} = useKlaster()
     const {toast}  = useToast()
+    const {setOpen}  = useModal()
+    const [primaryWallet] = useWallets();
+    // WALLET CLIENT
+    const walletClient = primaryWallet?.getWalletClient();
 const params =  useParams()
     const  router =  useRouter()
     const invoiceId = params.sessionId
   const  PAY_BASE_URL = `${BACKEND_URL}/invoice/`
-   const  LOCAL_BASE_URL  = "http://localhost:5000/invoice/"
-   const  OFFICIAL__BASE_URL  = "http://localhost:5000"
 
 
   const { Canvas } = useQRCode();
@@ -106,19 +117,11 @@ const params =  useParams()
     };
   }, [])
 
-  const handleFetchSession  =   async ()  =>  {
-    const res  =  await  axios.get(`${PAY_BASE_URL}get-invoice/${invoiceId}`)
-     return res.data
-  }
 
-    const {data, isPending, isError, isSuccess, isLoading, error}  = useQuery({
-     queryKey : ['sessionData'],
-     queryFn : handleFetchSession
-    })
 console.log("information", data)
 
 const RECIEVER_2 = data?.invoice?.userId?.wallet
-const  AMOUNT_2 = "0.001" //data?.invoice?.subtotal
+const  AMOUNT_2 = "1" //data?.invoice?.subtotal
 
                       const  handleInitiatePayment =  async ()  =>  {
                         try {
@@ -131,22 +134,88 @@ const  AMOUNT_2 = "0.001" //data?.invoice?.subtotal
 
 
                   const handleMutatePay =  async (valueData) =>  {
-                    const  res  = await  axios.post(`${LOCAL_BASE_URL}check-out/${invoiceId}`,  valueData)
+                    const  res  = await  axios.post(`${BACKEND_URL}/invoice/check-out/${invoiceId}`,  valueData)
                     return res
                   }
                   const invoicePayMutation = useMutation({
                    mutationFn : handleMutatePay,
                    mutationKey : ['sessionData']
                   })
+
+
+                   // KLASTER TRANSFER 
+      const klasterTransfer =  async ()  =>  {
+        console.log("you hitted me")
+      const bridgingOps =  await encodeBridgingOps({
+        tokenMapping : mcUSDC,
+        account : klaster?.account,
+        amount : parseUnits(AMOUNT_2, 6),
+        destinationChainId : arbitrum.id,
+        bridgePlugin :    (data)  => acrossBridgePlugin(data),
+        client : mcClient
+      })
+    
+       console.log("bridge information", bridgingOps)
+    
+      const opUSDC = mcUSDC.find(token =>  token.chainId === polygon.id)
+    
+       const sendUsdc  =  rawTx({
+         to: opUSDC?.address,
+         gasLimit: BigInt(120000),
+         data : encodeFunctionData({
+          abi : erc20Abi,
+          functionName : "transfer",
+           args : [
+            RECIEVER_2,
+            bridgingOps.totalReceivedOnDestination
+    ]
+         })
+       }) 
+     
+    const  itx =   buildItx({
+      steps : bridgingOps.steps.concat([
+        singleTx(arbitrum.id, sendUsdc),
+      ]),
+      feeTx : klaster?.encodePaymentFee(polygon.id, "USDC")
+    })
+    
+    const quote =   await  klaster.getQuote(itx)
+     console.log("the quote of token", quote)
+    
+     // Sign a message
+    const  signed = await walletClient?.signMessage({
+    message : {
+    raw : quote.itxHash
+    },
+    account : address
+    })
+    
+    
+    const result = await klaster?.execute(quote, signed)
+    
+    console.log("signed message", signed)
+    
+    console.log("excuted results", result)
+    
+    return result?.itxHash
+    }
           // 2. Define a submit handler.
           const pay  =  async ()=>{
         
             try {
               
-              const txHash =  await  handleTransferFund.sendTransactionAsync({
-                to : RECIEVER_2,
-                value  : parseEther(AMOUNT_2)
-              })
+              const txHash =  await  klasterTransfer()
+
+                 // Check if the transaction hash is valid before proceeding
+            if (!txHash) {
+              console.log("Transaction failed, no valid txHash.");
+              toast({
+                title: "Transaction Error",
+                description: "The on-chain transfer failed. Please check your balance and  try again.",
+                variant: "destructive"
+              });
+              return; // Exit the function, don't continue to the DB part
+            }
               await handleInitiatePayment()
               const valueData =  {
                     txHash,
@@ -166,36 +235,8 @@ const  AMOUNT_2 = "0.001" //data?.invoice?.subtotal
             }
             }
   
-
-        // Function to format the date
-  const formatDate = (dateStr) => {
-    const dateObj = new Date(dateStr);
-    const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
-    return formatter.format(dateObj);
-  }
-        
+   
   
-   /* if(error){
-      return(
-        <div className='w-full h-screen flex items-center justify-center'>
-
-          <p className='font-semibold text-center'>Something went wrong please check your connection and reload</p>
-          <p className='text-muted-foreground text-center'>Or reach out to our customer suport</p>
-        </div>
-      )
-    }*/
-
-   /* if(isLoading){
-      return(
-        <div className='w-full h-screen flex items-center justify-center'>
-
-         <Loader
-
-className='w-24 h-24 text-indigo-500 animate-spin'
-/>
-        </div>
-      )
-    }*/
    const  getPaymentState =  ()  =>  {
 
                 if(data?.invoice.status === "paid"   ){
@@ -217,9 +258,9 @@ className='w-24 h-24 text-indigo-500 animate-spin'
                      <p className=''>Wallet</p>
                   </div>
                    {! isConnected  ?  (
-                  <Button className='w-full' onClick={openConnectModal}>Connect wallet</Button>
+                  <Button className='w-full' onClick={() => setOpen(true)}>Connect wallet</Button>
                    ) : (
-                    <Button  onClick={pay} className={`w-full capitalize `} disabled={invoicePayMutation.isPending || handleTransferFund.isPending}>{data?.reciever?.labelText ? `${data?.reciever?.labelText} Now` : invoicePayMutation.isPending ? "Proccessing payment" :  handleTransferFund.isPending ? "Sending..." : "Continue to pay"}</Button>  
+                    <Button  onClick={pay} className={`w-full capitalize `} disabled={invoicePayMutation.isPending || ! hasEnoughBalance(klasterBalances, AMOUNT_2)}>{data?.reciever?.labelText ? `${data?.reciever?.labelText} Now` : invoicePayMutation.isPending ? "Proccessing payment" :   "Continue to pay"}</Button>  
 
                    )}
                    </div>
@@ -259,14 +300,8 @@ className='w-24 h-24 text-indigo-500 animate-spin'
                      />
                  </div>
                  
-                   <div  className='border  p-3 mt-3 rounded-xl'>
-                       <div  className='my-4 '>
-                          <h1  className='font-medium text-sm   mb-1'>{`Send ${data?.invoice?.paymentToken}  on Dev network network`}</h1>
-                           <div className='flex items-center  space-x-1'>
-                              <MessageCircleWarningIcon  className='w-3 h-3 text-muted-foreground'  />
-                               <p  className='text-xs  text-muted-foreground'>Sending funds on the wrong network or token leads to fund loss.</p>
-                           </div>
-                       </div>
+                   <div  className='border  p-1 mt-3 rounded-xl'>
+                       
                        <Button disabled ={isCheckingOut || ! status}  className='w-full ' variant={"outline"}>
                        
                       { status &&  status.status  === "COMPLETED"  && status.invoiceId === invoiceId ?  (
@@ -340,14 +375,10 @@ className='w-24 h-24 text-indigo-500 animate-spin'
              
             
   return (
+    <div>
+      <CheckoutNavbar address={"address"} balance={0}  />
     <div className=' max-w-5xl mx-auto    my-4 h-screen'>
 
-    {isConnected  &&  (
-      <div className='absolute right-2 mb-4'> 
-  <ConnectButton chainStatus={"none"} />
-
-      </div>
-    )}
         <div  className='flex flex-col md:flex-row lg:space-x-1 '>
           <div  className='flex-1 w-full md:min-h-screen bg-zinc-50 items-center justify-center relative   p-6  '>
         
@@ -359,7 +390,10 @@ className='w-24 h-24 text-indigo-500 animate-spin'
                 <div className='flex space-x-2 my-3 py-3  border-y justify-between'>
                    <Image  src={GLOBAL_LOGO} width={100} height={100} alt='currency logo' className='w-8 h-8 rounded-full hidden' />
                    <p className='font-medium '>Subtotal</p>
-                   <p className='font-medium '> {data?.invoice?.subtotal} {data?.invoice?.paymentToken}</p>
+                   <div className='flex space-x-1 items-center justify-center'>
+                    <Image   src={`/img/usdc.png`} width={100} height={100} alt='usdc' className='w-4 h-4 rounded-full'/>
+                   <p className='font-medium text-sm '> USDC</p>
+                   </div>
                 </div>
                 <div className='flex items-center space-x-4 justify-between'>
                    <p className='font-medium'>Due date</p>
@@ -384,7 +418,7 @@ className='w-24 h-24 text-indigo-500 animate-spin'
   
                   </div>
   <div  className='absolute bottom-14 w-full hidden lg:flex'>
-                     <p className='text-sm text-muted-foreground'>Powered by Munapay</p>
+                     <p className='text-sm text-muted-foreground'>Powered by ZapPay</p>
 
                    </div>
 
@@ -397,6 +431,7 @@ className='w-24 h-24 text-indigo-500 animate-spin'
 
   
 
+    </div>
     </div>
   )
 }

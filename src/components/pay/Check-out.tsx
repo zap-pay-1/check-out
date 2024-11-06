@@ -1,4 +1,3 @@
-
 //@ts-nocheck
 
 "use client"
@@ -7,25 +6,24 @@ import {
     useQuery,
   } from '@tanstack/react-query'
   import io from 'socket.io-client';
+
 import { z } from "zod"
 import axios from 'axios'
 import { Button } from "@/components/ui/button"
 import { useParams, useRouter } from 'next/navigation'
-import {Loader, Loader2, } from 'lucide-react'
+import {  Loader, Loader2, MoveLeft, } from 'lucide-react'
 import { AnimatePresence, motion } from "framer-motion"
 import Image from 'next/image';
 import SessionSuccess from './session-seccess';
 import FailedState from '../invoices/failedState';
-
-  import { useQRCode } from 'next-qrcode'
-  import { useForm } from "react-hook-form"
+import { useForm} from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { BACKEND_URL, GLOBAL_LOGO } from '@/constants';
-import PayState2 from './pay-state-2';
-import { useConnect } from '@particle-network/connectkit';
+import CheckouSessionPayState from './checkout-pay-state';
+import { useAccount } from '@particle-network/connectkit';
+import { BACKEND_URL } from '@/constants';
+import LoadingState from '../states/loading-state';
+import ErrorsState from '../states/errors-state';
 import CheckoutNavbar from '../checkout-navbar';
-import { useKlaster } from '@/providers/klaster-provider';
-import SessionExpired from './session-expired';
 
 
 const formSchema = z.object({
@@ -41,23 +39,21 @@ const formSchema = z.object({
  })
 
 
- type Props = {
+ type Props =  {
   data : any
  }
 export default function CheckOut({data} : Props) {
-    
     const [status, setStatus] = useState();
     const [isCheckingOut, setisCheckingOut] = useState(false)
-  
- 
+
    
 const params =  useParams()
-    const  router =  useRouter()
     const sessionId = params.sessionId
   const  PAY_BASE_URL = `${BACKEND_URL}/pay/`
    const  LOCAL_BASE_URL  = "http://localhost:5000/pay/"
-const {isConnected, address}  = useAccount()
-const {klasterAddress} = useKlaster()
+   const  OFFICIAL__BASE_URL  = "http://localhost:5000"
+
+
  
               // Initialize socket only once using useEffect
   const socket = io(BACKEND_URL, { autoConnect: false });
@@ -88,14 +84,12 @@ const {klasterAddress} = useKlaster()
 console.log("status", status)
 
  
-console.log("information", data)
-
+     
     const  SESSION_EXP_TIME =  data?.session?.durationTime
-
 
     useEffect(() => {
       if (window !== undefined && data?.session?.successUrl && status?.status === "COMPLETED") {
-        const successUrl = data?.reciever?.redirectUrl
+        const successUrl = data?.session?.successUrl;
      try {
           // Validate if it's a valid URL and ensure it starts with https
           const url = new URL(successUrl);
@@ -110,7 +104,11 @@ console.log("information", data)
       }
     }, [status]);
     
-    
+    const handleCancel = async ()  =>  {
+       const  cancelUrl = data?.session?.cancelUrl
+       window.location.href =  cancelUrl;
+    }
+  
 
               const  getPaymentState =  ()  =>  {
                 if(data?.session?.paymentStatus   === "completed"){
@@ -120,7 +118,7 @@ console.log("information", data)
                 }
                 if(!status    && data?.session?.paymentStatus  !== "completed" /* !testTruth  */  ){
                   return(
-                 <PayState2     data={data} status={status} SESSION_EXP_TIME={SESSION_EXP_TIME}  isCheckingOut={isCheckingOut} setisCheckingOut={setisCheckingOut}  />
+                 <CheckouSessionPayState     data={data} status={status} SESSION_EXP_TIME={SESSION_EXP_TIME}  isCheckingOut={isCheckingOut} setisCheckingOut={setisCheckingOut}  />
               
                   )
                    
@@ -158,11 +156,6 @@ console.log("information", data)
                     </motion.div>
                     </AnimatePresence>
                   )
-                }else if(status &&  status.status  === "EXPIRED"  && status.sessionId === sessionId ){
-                  return(
-                  <SessionExpired />
-                   )
-
                 }
               }
 
@@ -170,34 +163,66 @@ console.log("information", data)
              
             
   return (
-    <div>
-      {klasterAddress &&
-        <CheckoutNavbar balance={2} address={"helllo address"} />
-      }
-    <div className=' max-w-5xl mx-auto    my-4 h-screen  '>
-    
-    {/*} <OnChainDtaNav walletAddress={userMetadata?.publicAddress} balance={formattedBalance1} />*/}
+<div>
+  <CheckoutNavbar address={"address"} balance={9} />
+    <div className=' max-w-5xl mx-auto    my-4 min-h-screen  '>
+   
 
         <div  className='flex flex-col md:flex-row lg:space-x-1 '>
-          <div  className='flex-1 w-full md:min-h-screen bg-zinc-50 items-center justify-center relative   p-6  overflow-x-hidden'>
+          <div  className='flex-1 w-full md:min-h-screen bg-zinc-50 items-center justify-center relative border-r border-zinc-100   p-6  '>
         
                <div  className='my-5'>
-                 <h1  className='text-lg font-medium  md:font-semibold my-2 truncate'>{data?.reciever?.linkName}</h1>
-                 <div className='w-[95%] overflow-x-visible'>
-                  <h2  className='text-muted-foreground text-sm md:text-sm break-words line-clamp-6 '>{data?.reciever?.description}</h2>
-                  </div>
+                <div className='flex items-center space-x-1'>
+                   <Button size={"icon"}  variant={"ghost"} onClick={handleCancel}>
+                    <MoveLeft className='w-4 h-4 text-muted-foreground' />
+                   </Button>
+
+                   <div className='w-7 h-7 flex items-center justify-center border border-yellow-300 bg-purple-500 rounded-full'>P</div>
+                    <p className='text-sm'>{data?.session?.merchantBusinessName || data?.session.merchantFirstName }</p>
+                </div>
                </div>
 
                  <div  className='my-5  h-[1.5px]  bg-muted'></div>
 
-                  <div  className='flex  space-x-4  items-center'>
-                    <p className='font-medium md:font-semibold'>Amount</p>
-                    <div className='flex space-x-1 items-center justify-center'>
-                    <Image src={`/img/usdc.png`} height={100} width={100} alt='token logo' 
-                      className='w-4 h-4 rounded-full '
-                    />
-                     <p className='md:font-medium'>  {data?.session?.amount} USDC</p>
-                     </div>
+                  <div className='my-4'>
+                    {data?.session?.items.map((item, i)  =>  (
+                      <div key={i} className='flex justify-between items-center my-3'> 
+                      <div className='flex items-center space-x-2'>
+                      <div className='w-16 h-16 border rounded-md flex items-center justify-center p-1'>
+                        <Image src={item?.image} width={100} height={100} alt='image' className='w-14 h-14 object-cover rounded-md'  />
+                         </div>
+                      <div>
+                      <p className='text-sm'>{item?.name}</p>
+                      </div>
+                      </div>
+                      <div>
+                      <p className='text-sm'> <span className=''>$</span>{item?.price}</p>
+                      </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className='my-t md:mt-7'>
+                    <div className='flex items-center justify-between my-3'>
+                       <p className=''>Subtotal</p>
+                       <div>
+                        <p>  <span className='text-xl font-serif'>$</span>{data?.session.totalPrice}</p>
+                        </div>
+                    </div>
+
+                    <div className='flex items-center justify-between my-3'>
+                       <p className=''>Shipping Fee</p>
+                       <div>
+                        <p> <span className='text-xl font-serif'>$</span>{data?.session.shippingFee || "0"}</p>
+                        </div>
+                    </div>
+
+                    <div className='flex items-center justify-between my-3'>
+                       <p className='font-semibold'>Total</p>
+                       <div>
+                        <p> <span className='text-xl font-serif'>$</span>{data?.session.totalPrice}</p>
+                        </div>
+                    </div>
                   </div>
 
 
@@ -208,17 +233,16 @@ console.log("information", data)
 */}
                    <div  className='absolute bottom-14 w-full hidden lg:flex'>
                    <p className='text-sm text-muted-foreground'>Powered by ZapPay</p>
+
+                  
   </div>
 
          </div>
           <div  className='flex-1   md:h-screen    p-6  '>
           {getPaymentState()}
           </div>
-                
-            </div>    </div>           
-            </div>
-         
-            )}
+             </div>    </div>   </div>        
+        )}
 
   
 
