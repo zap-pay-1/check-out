@@ -16,7 +16,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import Image from 'next/image';
 import SessionSuccess from './session-seccess';
 import FailedState from '../invoices/failedState';
-
+import { useAccount } from '@particle-network/connectkit';
   import { useQRCode } from 'next-qrcode'
   import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"

@@ -24,7 +24,7 @@ export default function CheckoutNavbar({balance, address} : Props) {
   }
      console.log("provider balances", klasterBalances)
   return (
-    <div className='w-full border-b  p-3 flex items-center justify-center sticky top-0 bg-white/85 z-20'>
+    <div className={`w-full border-b  ${! klasterAddress ? "hidden"  : "flex"}  p-3 flex items-center justify-center sticky top-0 bg-white/85 z-20`}>
         <div className='w-full max-w-7xl mx-auto flex justify-between items-center'>
      <Logo   />
 

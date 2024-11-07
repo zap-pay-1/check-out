@@ -5,8 +5,8 @@ import { Calendar, } from "lucide-react";
 import { BadgeDollarSign , Link, House, Settings, LayoutDashboard, Link2, Flame, Code2, TrendingUp, DollarSign} from "lucide-react";
 import { IconInvoice } from "@tabler/icons-react";
 export const  GLOBAL_LOGO ="https://pbs.twimg.com/profile_images/1792601935737966592/EK42ujXH_400x400.jpg"
-export const  BACKEND_URL =  "http://localhost:5000"   //"https://pap-4ohb.onrender.com"
- export const WEBSITE_BASE_URL = "https://devnet.munapay.xyz/"
+export const  BACKEND_URL =  "https://zap-pay.onrender.com"   //"https://pap-4ohb.onrender.com"
+ export const WEBSITE_BASE_URL = "https://pay.usezap.xyz/"
  export const  INVOICE_ABB =  "#XWZHZ1JJK"
  export const PUBLIC_IPFS_GATEWAY ="https://ipfs.subsocial.network/ipfs/"
 export const  sideBarMenu = [
@@ -141,4 +141,23 @@ status: "COMPLETED",
 txHash: "0xf201e41e6061782c15ec74dc273ffe86a0cc0c077a379cc5662bb75110b58914"
 }
 
-export const MUNA_PAY_INTRO_TEXT = `MunaPay is a payment solution for individuals and organisations to start accepting payments on Hedera. With a low-code solution, mobile-native design, and support for various payment methods, we make it easy for merchants to upgrade their payment system with crypto.`
+export const variable = [
+  {
+  name : "project id",
+  value : process.env.NEXT_PUBLIC_PROJECT_ID as string
+},
+{
+  name : "client key",
+  value : process.env.NEXT_PUBLIC_CLIENT_KEY as string
+},
+{
+  name : "app id",
+  value : process.env.NEXT_PUBLIC_APP_ID as string
+},
+{
+  name : "project id",
+  value : process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID 
+},
+
+]
+export const MUNA_PAY_INTRO_TEXT = `ZapPay is a payment solution for individuals and organisations to start accepting payments on Hedera. With a low-code solution, mobile-native design, and support for various payment methods, we make it easy for merchants to upgrade their payment system with crypto.`

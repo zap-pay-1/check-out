@@ -1,9 +1,20 @@
-"use client"
-
+'use client' // Error boundaries must be Client Components
+ 
 import Image from 'next/image'
-import React from 'react'
-
-export default function error() {
+import { useEffect } from 'react'
+ 
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    // Log the error to an error reporting service
+    console.log("page errors",error)
+  }, [error])
+ 
   return (
     <div  className='w-full bg-zinc-100 dotted h-screen flex items-center justify-center'>
     <div>

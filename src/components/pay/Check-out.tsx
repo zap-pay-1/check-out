@@ -88,18 +88,24 @@ console.log("status", status)
     const  SESSION_EXP_TIME =  data?.session?.durationTime
 
     useEffect(() => {
-      if (window !== undefined && data?.session?.successUrl && status?.status === "COMPLETED") {
+      if (typeof window !== "undefined" && data?.session?.successUrl && status?.status === "COMPLETED") {
         const successUrl = data?.session?.successUrl;
-     try {
-          // Validate if it's a valid URL and ensure it starts with https
+    
+        try {
+          // Parse and validate the URL
           const url = new URL(successUrl);
-          if (url  /*.protocol === 'https:'*/) {
-            window.location.href = successUrl; // Redirect only if it's a valid HTTPS URL
+    
+          // Check if it starts with 'https:' and optionally matches a trusted domain
+          const isHttps = url.protocol === 'https:';
+        
+    
+          if (isHttps) {
+            window.location.href = successUrl; // Redirect if it's a valid, trusted HTTPS URL
           } else {
-            console.error("Invalid redirect URL: Must be an HTTPS URL.");
+            console.error("Invalid redirect URL: Must be an HTTPS URL from a trusted domain.");
           }
         } catch (error) {
-          console.error("Invalid URL:", error?.message); // Handle invalid URL format
+          console.error("Invalid URL format:", error.message); // Handle invalid URL format
         }
       }
     }, [status]);

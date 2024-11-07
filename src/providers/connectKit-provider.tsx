@@ -49,7 +49,7 @@ const config = createConfig({
     walletConnectors: [
         evmWalletConnectors({
             metadata: { name: 'My App', icon: '', description: '', url: '' }, // Optional, this is Metadata used by WalletConnect and Coinbase
-            walletConnectProjectId: 'Replace with your WalletConnect Project ID', // optional, retrieved from https://cloud.walletconnect.com
+            walletConnectProjectId: walletConnectProjectId, // optional, retrieved from https://cloud.walletconnect.com
         }),
         authWalletConnectors({
             // Optional, configure this if you're using social logins
